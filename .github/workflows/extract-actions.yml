@@ -1,0 +1,133 @@
+name: Extract VS Code Actions
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+      - feat-action-log
+    # paths:
+    #   - 'src/vs/platform/actions/common/actions.ts'
+    #   - 'src/vs/**/*Action*.ts'
+    #   - 'scripts/parse-actions-log.js'
+
+jobs:
+  extract-actions:
+    name: Extract Actions Metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Compute node modules cache key
+        id: nodeModulesCacheKey
+        run: echo "value=$(node build/azure-pipelines/common/computeNodeModulesCacheKey.js)" >> $GITHUB_OUTPUT
+      - name: Cache node modules
+        id: cacheNodeModules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-cacheNodeModules20-${{ steps.nodeModulesCacheKey.outputs.value }}
+          restore-keys: ${{ runner.os }}-cacheNodeModules20-
+      - name: Get npm cache directory path
+        id: npmCacheDirPath
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        run: echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
+      - name: Cache npm directory
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.npmCacheDirPath.outputs.dir }}
+          key: ${{ runner.os }}-npmCacheDir-${{ steps.nodeModulesCacheKey.outputs.value }}
+          restore-keys: ${{ runner.os }}-npmCacheDir-
+      - name: Install system dependencies
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        run: |
+          sudo apt update
+          sudo apt install -y libxkbfile-dev pkg-config libkrb5-dev libxss1 xvfb libgtk-3-0 libgbm1
+      - name: Execute npm
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+        run: |
+          npm ci
+
+      - name: Compile source code
+        run: npm run compile
+
+      - name: Run VS Code and capture logs
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+
+          # Wait for Xvfb to start
+          sleep 3
+
+          # Run VS Code and capture logs
+          timeout 120 ./scripts/code.sh --no-sandbox --disable-dev-shm-usage 2>&1 | tee /tmp/vscode.log || true
+
+          # Give it time to register all actions
+          sleep 5
+
+      - name: Parse actions from logs
+        run: |
+          node scripts/parse-actions-log.js /tmp/vscode.log > actions.json
+
+          # Verify we got some actions
+          ACTION_COUNT=$(jq '. | length' actions.json)
+          echo "Extracted $ACTION_COUNT actions"
+
+          if [ "$ACTION_COUNT" -lt 100 ]; then
+            echo "Warning: Only extracted $ACTION_COUNT actions, expected more"
+            exit 1
+          fi
+
+      - name: Generate metadata
+        run: |
+          # Create a metadata file with timestamp and commit info
+          cat > actions-metadata.json << EOF
+          {
+            "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit_sha": "${{ github.sha }}",
+            "commit_message": $(echo '${{ github.event.head_commit.message }}' | jq -Rs .),
+            "branch": "${{ github.ref_name }}",
+            "action_count": $(jq '. | length' actions.json)
+          }
+          EOF
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-actions-${{ github.sha }}
+          path: |
+            actions.json
+            actions-metadata.json
+          retention-days: 90
+
+      - name: Create summary
+        run: |
+          echo "## VS Code Actions Extraction Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Actions:** $(jq '. | length' actions.json)" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated:** $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Top 10 Categories" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          jq -r '
+            group_by(.category) |
+            map({category: (if (.[0].category == null or .[0].category == "") then "Uncategorized" else .[0].category end), count: length}) |
+            sort_by(-.count) |
+            .[:10] |
+            .[] |
+            "- **\(.category)**: \(.count)"
+          ' actions.json >> $GITHUB_STEP_SUMMARY
