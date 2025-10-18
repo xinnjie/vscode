@@ -69,7 +69,7 @@ jobs:
           export DISPLAY=:99
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
           sleep 3
-          timeout 15 ./scripts/code.sh --no-sandbox --disable-dev-shm-usage 2>&1 | tee /tmp/vscode.log || true
+          timeout --kill-after=1s 60s ./scripts/code.sh --no-sandbox --disable-dev-shm-usage 2>&1 | tee /tmp/vscode.log || true
           sleep 5
 
       - name: Parse actions from logs
