@@ -14,6 +14,7 @@ import { IModelService } from '../common/services/model.js';
 import { ITextModelService } from '../common/services/resolverService.js';
 import { MenuId, MenuRegistry, Action2 } from '../../platform/actions/common/actions.js';
 import { CommandsRegistry, ICommandMetadata } from '../../platform/commands/common/commands.js';
+import { logEditorActionMetadata } from './logEditorActionMetadata.js';
 import { ContextKeyExpr, IContextKeyService, ContextKeyExpression } from '../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor as InstantiationServicesAccessor, BrandedService, IInstantiationService, IConstructorSignature } from '../../platform/instantiation/common/instantiation.js';
 import { IKeybindings, KeybindingsRegistry, KeybindingWeight } from '../../platform/keybinding/common/keybindingsRegistry.js';
@@ -524,11 +525,13 @@ export function registerEditorCommand<T extends EditorCommand>(editorCommand: T)
 
 export function registerEditorAction<T extends EditorAction>(ctor: { new(): T }): T {
 	const action = new ctor();
+	logEditorActionMetadata(action);
 	EditorContributionRegistry.INSTANCE.registerEditorAction(action);
 	return action;
 }
 
 export function registerMultiEditorAction<T extends MultiEditorAction>(action: T): T {
+	logEditorActionMetadata(action);
 	EditorContributionRegistry.INSTANCE.registerEditorAction(action);
 	return action;
 }

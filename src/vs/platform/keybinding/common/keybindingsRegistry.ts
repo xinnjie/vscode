@@ -161,6 +161,7 @@ class KeybindingsRegistryImpl implements IKeybindingsRegistry {
 	}
 
 	public registerCommandAndKeybindingRule(desc: ICommandAndKeybindingRule): IDisposable {
+
 		return combinedDisposable(
 			this.registerKeybindingRule(desc),
 			CommandsRegistry.registerCommand(desc)
