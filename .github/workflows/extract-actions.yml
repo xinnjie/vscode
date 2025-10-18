@@ -69,21 +69,13 @@ jobs:
         run: |
           export DISPLAY=:99
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-
-          # Wait for Xvfb to start
           sleep 3
-
-          # Run VS Code and capture logs
           timeout 120 ./scripts/code.sh --no-sandbox --disable-dev-shm-usage 2>&1 | tee /tmp/vscode.log || true
-
-          # Give it time to register all actions
           sleep 5
 
       - name: Parse actions from logs
         run: |
           node scripts/parse-actions-log.js /tmp/vscode.log > actions.json
-
-          # Verify we got some actions
           ACTION_COUNT=$(jq '. | length' actions.json)
           echo "Extracted $ACTION_COUNT actions"
 
@@ -94,7 +86,6 @@ jobs:
 
       - name: Generate metadata
         run: |
-          # Create a metadata file with timestamp and commit info
           cat > actions-metadata.json << EOF
           {
             "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
@@ -136,43 +127,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ONEKEYMAP_PR_TOKEN }}
         run: |
-          # Clone the target repository
+          gh auth setup-git
           git clone https://github.com/xinnjie/onekeymap-cli.git /tmp/onekeymap-cli
           cd /tmp/onekeymap-cli
-
-          # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Create a new branch
           BRANCH_NAME="update-vscode-actions-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
-
-          # Create doc directory if it doesn't exist
           mkdir -p doc
-
-          # Copy the actions.json file
           cp $GITHUB_WORKSPACE/actions.json doc/vscode-actions.json
-
-          # Check if there are any changes
-          if git diff --quiet; then
+          git add doc/vscode-actions.json
+          if git diff --staged --quiet; then
             echo "No changes detected, skipping PR creation"
             exit 0
           fi
-
-          # Commit changes
-          git add doc/vscode-actions.json
           ACTION_COUNT=$(jq '. | length' doc/vscode-actions.json)
           git commit -m "Update VS Code actions metadata
 
           - Total actions: $ACTION_COUNT
           - Generated from: ${{ github.repository }}@${{ github.sha }}
           - Generated at: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)"
-
-          # Push the branch
           git push origin "$BRANCH_NAME"
-
-          # Create pull request using GitHub CLI
           gh pr create \
             --repo xinnjie/onekeymap-cli \
             --base main \
