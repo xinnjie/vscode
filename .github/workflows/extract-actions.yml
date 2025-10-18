@@ -122,13 +122,13 @@ jobs:
             "- **\(.category)**: \(.count)"
           ' actions.json >> $GITHUB_STEP_SUMMARY
 
-      - name: Create PR to onekeymap-cli repository
+      - name: Create PR to onekeymap-page repository
         env:
           GH_TOKEN: ${{ secrets.ONEKEYMAP_PR_TOKEN }}
         run: |
           gh auth setup-git
-          git clone https://github.com/xinnjie/onekeymap-cli.git /tmp/onekeymap-cli
-          cd /tmp/onekeymap-cli
+          git clone https://github.com/xinnjie/onekeymap-page.git /tmp/onekeymap-page
+          cd /tmp/onekeymap-page
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           BRANCH_NAME="update-vscode-actions-$(date +%Y%m%d-%H%M%S)"
@@ -148,7 +148,7 @@ jobs:
           - Generated at: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)"
           git push origin "$BRANCH_NAME"
           gh pr create \
-            --repo xinnjie/onekeymap-cli \
+            --repo xinnjie/onekeymap-page \
             --base main \
             --head "$BRANCH_NAME" \
             --title "Update VS Code actions metadata ($(date +%Y-%m-%d))" \
