@@ -6,11 +6,10 @@ on:
   push:
     branches:
       - main
-      - feat-action-log
-    # paths:
-    #   - 'src/vs/platform/actions/common/actions.ts'
-    #   - 'src/vs/**/*Action*.ts'
-    #   - 'scripts/parse-actions-log.js'
+    paths:
+      - 'src/vs/platform/actions/common/actions.ts'
+      - 'src/vs/**/*Action*.ts'
+      - 'scripts/parse-actions-log.js'
 
 jobs:
   extract-actions:
